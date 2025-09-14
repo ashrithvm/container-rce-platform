@@ -1,234 +1,388 @@
-# Containerized Remote Code Execution (RCE) Platform
+# AWS Cloud-Native Remote Code Execution (RCE) Platform
 
-This is a full-stack web application that allows users to write, submit, and execute code in multiple languages (C++, Java, Python, JavaScript) securely in isolated Docker containers. The application features a modern code editor, real-time job status updates, syntax validation, and robust error handling.
+A fully serverless, cloud-native web application built on AWS that allows users to write, submit, and execute code in multiple languages (C++, Java, Python, JavaScript) with enterprise-grade security, scalability, and cost efficiency.
 
-## Features
+## 🏗️ Architecture
 
--   **Multi-language Support:** Execute code in C++, Java, Python, and JavaScript.
--   **Secure Sandboxing:** Code is executed in isolated Docker containers with resource limits (memory, CPU), disabled networking, and a seccomp profile for enhanced security on Linux.
--   **Modern Code Editor:** Uses Monaco Editor (the engine behind VS Code) for a rich editing experience.
--   **Asynchronous Job Queue:** Leverages Bull and Redis to manage code execution jobs, ensuring scalability and reliability.
--   **Real-time Status Updates:** The frontend polls the server to provide real-time feedback on job status (pending, active, completed, or failed).
--   **Pre-execution Syntax Validation:** Code is validated for syntax errors before being sent for execution, providing instant feedback to the user.
--   **Comprehensive Error Handling:** Clear and informative error messages for syntax errors, runtime errors, and timeouts.
--   **Optional Logging:** Execution details can be logged to a MongoDB database.
+### Cloud-Native AWS Architecture
 
-## Project Structure
-
-```
-container-rce-platform/
-├── public/              # Static assets for the React frontend
-├── src/                 # React frontend source code
-│   ├── Pages/
-│   └── utils/
-├── server/              # Node.js/Express backend
-│   ├── config/          # Configuration for database and languages
-│   ├── controllers/     # Request handlers for API endpoints
-│   ├── docker/          # Docker-related utilities and security profiles
-│   ├── routes/          # API routes
-│   └── utils/           # Helper utilities for the backend
-├── package.json         # Frontend dependencies and scripts
-├── server/package.json  # Backend dependencies and scripts
-└── README.md
-```
-
-## Tech Stack
-
--   **Frontend:** React, Tailwind CSS, Monaco Editor, Axios
--   **Backend:** Node.js, Express.js
--   **Job Queue:** Bull, Redis
--   **Containerization:** Docker, Dockerode
--   **Database:** MongoDB (optional, for logging)
-
-## Architecture and Design
-
-### High-Level Architecture
-
-The application is designed as a classic client-server architecture with a decoupled, asynchronous backend for processing code execution jobs.
+This platform leverages AWS services for maximum efficiency, scalability, and cost optimization:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                          User's Browser                         │
+│                     User's Browser                             │
 │  ┌─────────────────┐                                            │
-│  │  React Frontend │                                            │
+│  │  React SPA      │                                            │
+│  │  (CloudFront)   │                                            │
 │  └─────────────────┘                                            │
 └─────────────────────────────────────────────────────────────────┘
                                │
                                ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                    Backend Server (Node.js/Express)             │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐              │
-│  │ API Server  │  │ Job Queue   │  │    Job      │              │
-│  │             │  │   (Bull)    │  │ Processor   │              │
-│  └─────────────┘  └─────────────┘  └─────────────┘              │
+│                      API Gateway (REST)                        │
+│  ┌─────────────────┐  ┌─────────────────┐                      │
+│  │ POST /execute   │  │ GET /job-status │                      │
+│  └─────────────────┘  └─────────────────┘                      │
 └─────────────────────────────────────────────────────────────────┘
                                │
                                ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                         Infrastructure                          │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐              │
-│  │    Redis    │  │   Docker    │  │   Docker    │              │
-│  │             │  │   Engine    │  │ Container   │              │
-│  └─────────────┘  └─────────────┘  └─────────────┘              │
+│                     Lambda Functions                           │
+│  ┌─────────────────┐  ┌─────────────────┐                      │
+│  │   API Lambda    │  │ Executor Lambda │                      │
+│  │ (Job Creation)  │  │ (Code Execution)│                      │
+│  └─────────────────┘  └─────────────────┘                      │
+└─────────────────────────────────────────────────────────────────┘
+                │                          │
+                ▼                          ▼
+┌─────────────────┐              ┌─────────────────┐
+│  SQS Queue      │              │ ElastiCache     │
+│  (Job Queue)    │              │ (Job Status)    │
+└─────────────────┘              └─────────────────┘
+                │
+                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                        S3 Storage                              │
+│  ┌─────────────────┐  ┌─────────────────┐                      │
+│  │ Code Storage    │  │ Frontend Assets │                      │
+│  │  (Temporary)    │  │   (Static Web)  │                      │
+│  └─────────────────┘  └─────────────────┘                      │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### Workflow Explained
+### 🚀 Key Architectural Benefits
 
-1.  **Code Submission:** The user writes code in the React frontend and submits it. The frontend sends a `POST` request to the backend API with the code and selected language.
-2.  **Job Creation:** The Express server receives the request. Instead of executing the code directly, it creates a new job and adds it to a **job queue** managed by Bull. This queue is backed by Redis. The server immediately returns a `jobId` to the frontend.
-3.  **Frontend Polling:** The frontend receives the `jobId` and begins periodically polling a status endpoint (`/api/v1/job-status/:jobId`) to ask for updates.
-4.  **Job Processing:** A separate process (the job processor) listens for new jobs on the queue. When it picks up a job, it performs the following steps:
-    *   **Syntax Validation:** It first validates the code's syntax to catch simple errors without needing to spin up a container.
-    *   **Docker Execution:** If the syntax is valid, it creates a temporary file with the user's code and spins up a new, isolated Docker container. The code is executed within this container.
-5.  **Execution and Cleanup:** The container runs the code and captures its `stdout` and `stderr`. After execution completes (or times out), the container is destroyed, and the temporary file is deleted.
-6.  **Status Update:** The job processor updates the job's status in Redis with the result (output or error).
-7.  **Result Retrieval:** On the next polling request, the frontend receives the `completed` or `failed` status along with the execution result or error message, which is then displayed to the user.
+1. **Maximum Efficiency (Priority 1)**:
+   - **Pay-per-execution model**: Lambda functions only charge when code is executed
+   - **Auto-scaling**: No idle resources, scales from 0 to thousands of executions
+   - **Cold start optimization**: Efficient code execution with minimal latency
+   - **Resource limits**: Memory and CPU constraints prevent runaway processes
 
-### Design Choices
+2. **Scalability (Priority 2)**:
+   - **Horizontal scaling**: SQS queue handles millions of messages
+   - **Concurrent execution**: Multiple Lambda instances process jobs in parallel
+   - **Global distribution**: CloudFront serves frontend globally
+   - **Elastic caching**: Redis scales based on demand
 
--   **Asynchronous Job Queue (Bull + Redis):** Direct, synchronous execution of code on the API server would block the request thread, making the server unresponsive and unable to handle other requests. A job queue decouples the long-running execution task from the initial API request, ensuring the server remains available and can scale to handle many concurrent submissions.
+3. **Security**:
+   - **Isolated execution**: Each code execution runs in a separate Lambda environment
+   - **VPC isolation**: Lambda functions run in private subnets
+   - **Encryption**: All data encrypted at rest and in transit
+   - **IAM permissions**: Least privilege access controls
 
--   **Docker for Sandboxing:** Security is the primary concern when running arbitrary code. Docker provides a strong, lightweight isolation mechanism. Each job runs in its own container with a separate filesystem, restricted resources (CPU/memory), and disabled networking, preventing malicious or poorly written code from impacting the host system.
+4. **Cost Optimization**:
+   - **No idle infrastructure**: Pay only for actual usage
+   - **Efficient resource allocation**: Right-sized Lambda functions
+   - **Content delivery**: CloudFront reduces bandwidth costs
+   - **Auto-expiring storage**: Temporary code files auto-delete
 
--   **Frontend Polling vs. WebSockets:** While WebSockets would provide true real-time updates, they add complexity to both the frontend and backend (managing connections, scaling, etc.). For this application, polling is a simpler and more robust solution that provides a "good enough" real-time feel without the added overhead.
+## 🛠️ Technology Stack
 
--   **Pre-execution Syntax Validation:** Running code in a Docker container has a startup cost. By performing a quick syntax check before creating a container, the system can provide immediate feedback for simple errors and save resources by not spinning up containers for code that is guaranteed to fail.
+### Frontend
+- **React 18** - Modern UI library
+- **Tailwind CSS** - Utility-first CSS framework
+- **Monaco Editor** - VS Code editor engine
+- **Axios** - HTTP client for API calls
 
-## Prerequisites
+### Backend (AWS Services)
+- **AWS Lambda** - Serverless compute for API and execution
+- **Amazon API Gateway** - RESTful API management
+- **Amazon SQS** - Message queue for job management
+- **Amazon ElastiCache (Redis)** - In-memory data store for job status
+- **Amazon S3** - Object storage for code and static assets
+- **Amazon CloudFront** - Global content delivery network
 
--   **Node.js** (v16+ recommended)
--   **npm** (v8+ recommended)
--   **Docker:** Required for code execution. Ensure the Docker daemon is running.
--   **Redis:** Required for the job queue. Can be run locally or via Docker.
--   **MongoDB:** Optional, for logging execution data.
+### Infrastructure
+- **Terraform** - Infrastructure as Code
+- **AWS VPC** - Network isolation and security
+- **AWS IAM** - Identity and access management
+- **Amazon CloudWatch** - Monitoring and logging
 
-## Quick Start
+## 📋 Prerequisites
 
-### 1. Clone the Repository
+- **AWS CLI** (v2.0+) - [Installation Guide](https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html)
+- **Terraform** (v1.0+) - [Installation Guide](https://learn.hashicorp.com/tutorials/terraform/install-cli)
+- **Node.js** (v18+) - [Download](https://nodejs.org/)
+- **AWS Account** with appropriate permissions
 
-```sh
+## ⚡ Quick Start
+
+### 1. Clone and Setup
+
+```bash
 git clone https://github.com/your-username/container-rce-platform.git
 cd container-rce-platform
-```
 
-### 2. Install Dependencies
-
-Install dependencies for both the frontend and backend.
-
-```sh
 # Install frontend dependencies
 npm install
 
-# Install backend dependencies
-cd server
-npm install
-cd ..
+# Install Lambda function dependencies
+cd aws-lambda/api && npm install && cd ../..
+cd aws-lambda/executor && npm install && cd ../..
 ```
 
-### 3. Configure Environment Variables
+### 2. Configure AWS Credentials
 
-Create a `.env` file in the `server/` directory. This file is required for connecting to Redis and optionally MongoDB.
-
-```env
-# Example .env file in server/
-
-# URL for your Redis instance
-REDIS_URL=redis://127.0.0.1:6379
-
-# (Optional) MongoDB connection string for logging
-MONGO_URI=mongodb://localhost:27017/rce
-
-# Port for the backend server
-PORT=5000
+```bash
+aws configure
+# Provide your AWS Access Key ID, Secret Access Key, and preferred region
 ```
 
-> **Note:** If you use the `docker-compose.yml` file provided in the `server` directory, the Redis service will be created for you.
+### 3. Configure Terraform Variables
 
-### 4. Start Required Services
-
-Ensure Docker and Redis are running. If you are using the provided Docker Compose setup for Redis:
-
-```sh
-cd server
-docker-compose up -d redis # Start Redis in detached mode
+```bash
+cd terraform
+cp terraform.tfvars.example terraform.tfvars
+# Edit terraform.tfvars with your preferred settings
 ```
 
-### 5. Run the Application
+### 4. Deploy to AWS
 
-From the root directory of the project, run the `dev` script:
+```bash
+# Deploy everything with one command
+npm run deploy
 
-```sh
+# Or deploy step by step:
+npm run tf:init    # Initialize Terraform
+npm run tf:plan    # Review deployment plan
+npm run tf:apply   # Deploy infrastructure
+```
+
+### 5. Access Your Application
+
+After deployment completes, you'll receive:
+- **CloudFront URL**: Your global application URL
+- **API Gateway URL**: Direct API endpoint
+
+## 🔧 Deployment Options
+
+### Automated Deployment
+```bash
+# Full deployment (recommended)
+./scripts/deploy.sh
+
+# Plan only (dry run)
+./scripts/deploy.sh plan
+
+# Destroy all resources
+./scripts/deploy.sh destroy
+```
+
+### Manual Deployment
+```bash
+# Initialize Terraform
+npm run tf:init
+
+# Plan deployment
+npm run tf:plan
+
+# Apply infrastructure
+npm run tf:apply
+
+# Update Lambda functions only
+npm run update:lambda:api
+npm run update:lambda:executor
+```
+
+## 📊 Cost Optimization
+
+### Estimated Monthly Costs (US East - Light Usage)
+
+| Service | Usage | Cost |
+|---------|--------|------|
+| Lambda | 10,000 executions/month | ~$0.20 |
+| API Gateway | 10,000 requests/month | ~$0.04 |
+| ElastiCache | t3.micro, single node | ~$15.00 |
+| S3 | 1GB storage, 1GB transfer | ~$0.05 |
+| CloudFront | 1GB transfer | ~$0.09 |
+| SQS | 10,000 messages | ~$0.004 |
+| **Total** | | **~$15.38/month** |
+
+### Cost Optimization Features
+- **Auto-scaling**: Resources scale to zero when not in use
+- **S3 Lifecycle**: Temporary files auto-delete after 1 day
+- **Lambda right-sizing**: Memory allocation optimized per language
+- **CloudFront caching**: Reduces origin requests
+
+## 🔐 Security Features
+
+### Network Security
+- **VPC Isolation**: Lambda functions run in private subnets
+- **Security Groups**: Restrictive firewall rules
+- **NAT Gateways**: Secure internet access for Lambda functions
+
+### Data Security
+- **Encryption at Rest**: S3 and ElastiCache use AES-256
+- **Encryption in Transit**: TLS 1.2+ for all communications
+- **IAM Policies**: Least privilege access controls
+- **Temporary Storage**: Code files auto-expire
+
+### Code Execution Security
+- **Isolated Environments**: Each execution in separate Lambda container
+- **Resource Limits**: Memory and CPU constraints
+- **Timeout Protection**: Execution time limits prevent infinite loops
+- **Syntax Validation**: Pre-execution code validation
+
+## 📈 Monitoring and Observability
+
+### CloudWatch Integration
+- **Lambda Metrics**: Duration, errors, invocations
+- **API Gateway**: Request count, latency, errors
+- **SQS Metrics**: Queue depth, message processing
+- **Custom Alarms**: Automated alerting for failures
+
+### Monitoring Dashboard
+Access the CloudWatch dashboard for real-time metrics:
+- Lambda execution statistics
+- API performance metrics
+- Queue processing rates
+- Error rates and patterns
+
+## 🎯 Supported Languages
+
+| Language | Runtime | Compile Time | Execute Time |
+|----------|---------|--------------|--------------|
+| **C++** | GCC 11+ | ~5 seconds | ~2 seconds |
+| **Java** | OpenJDK 17 | ~10 seconds | ~3 seconds |
+| **Python** | Python 3.9 | N/A | ~1 second |
+| **JavaScript** | Node.js 20 | N/A | ~1 second |
+
+## 🚨 API Reference
+
+### Execute Code
+```http
+POST /execute
+Content-Type: application/json
+
+{
+  "code": "print('Hello, World!')",
+  "language": "python"
+}
+```
+
+**Response:**
+```json
+{
+  "jobId": "uuid-v4",
+  "status": "queued",
+  "message": "Code execution job has been queued successfully"
+}
+```
+
+### Get Job Status
+```http
+GET /job-status/{jobId}
+```
+
+**Response (Completed):**
+```json
+{
+  "status": "completed",
+  "result": "Hello, World!",
+  "timestamp": 1640995200000
+}
+```
+
+**Response (Failed):**
+```json
+{
+  "status": "failed",
+  "error": "Syntax error: invalid syntax",
+  "timestamp": 1640995200000
+}
+```
+
+## 🔄 CI/CD Integration
+
+### GitHub Actions Example
+```yaml
+name: Deploy RCE Platform
+on:
+  push:
+    branches: [main]
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+      - name: Deploy
+        run: ./scripts/deploy.sh
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+```
+
+## 🛠️ Development
+
+### Local Development
+```bash
+# Start local development (uses original architecture)
 npm run dev
+
+# Build for production
+npm run build
+
+# Test Lambda functions locally (with SAM CLI)
+sam local start-api
 ```
 
-This command concurrently starts:
--   The **React frontend** on `http://localhost:3000`.
--   The **Express backend** on `http://localhost:5000`.
+### Environment Variables
+- `REACT_APP_API_BASE_URL`: API Gateway endpoint
+- `AWS_REGION`: AWS region for deployment
+- `ENVIRONMENT`: Deployment environment (dev/staging/prod)
 
-The frontend is configured to proxy API requests to the backend.
+## 🔧 Troubleshooting
 
-## Available Scripts
+### Common Issues
 
-### Root `package.json`
+1. **Lambda Cold Starts**
+   - Implement connection pooling for Redis
+   - Use provisioned concurrency for critical functions
 
--   `npm start`: Starts the React development server.
--   `npm run build`: Builds the React app for production.
--   `npm run server`: A helper script to run the backend server from the root.
--   `npm run dev`: Runs both the frontend and backend concurrently.
+2. **ElastiCache Connection Issues**
+   - Ensure Lambda functions are in VPC
+   - Check security group configurations
 
-### `server/package.json`
+3. **S3 Access Denied**
+   - Verify IAM policies and bucket permissions
+   - Check object key patterns and lifecycle rules
 
--   `npm start`: Starts the backend server using `node`.
--   `npm run dev`: Starts the backend server using `nodemon`, which automatically restarts on file changes.
+4. **CloudFront Cache Issues**
+   - Create invalidations after deployments
+   - Configure appropriate cache behaviors
 
-## API Endpoints
+### Debug Commands
+```bash
+# Check Terraform state
+terraform show
 
-The backend exposes the following REST API endpoints:
+# View CloudWatch logs
+aws logs describe-log-groups
 
--   `POST /api/v1/execute`
-    -   Submits code for execution.
-    -   **Body:** `{ "language": "cpp", "code": "..." }`
-    -   **Returns:** `{ "jobId": "...", "status": "pending" }`
+# Test Lambda function
+aws lambda invoke --function-name container-rce-platform-api response.json
+```
 
--   `GET /api/v1/job-status/:jobId`
-    -   Polls for the status and result of an execution job.
-    -   **Returns:**
-        -   `{ "status": "completed", "result": "..." }`
-        -   `{ "status": "failed", "error": "..." }`
-        -   `{ "status": "waiting" | "active" }`
+## 🤝 Contributing
 
-## Security and Resource Management
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
--   **Container Isolation:** Each code execution runs in a new, isolated Docker container.
--   **Resource Limits:** Containers are restricted in their memory and CPU usage to prevent abuse.
--   **Network Isolation:** Networking is disabled within the containers to prevent external calls.
--   **Read-only Filesystem:** The submitted code is mounted as a read-only file to prevent modification.
--   **Seccomp Profiles:** On Linux, a seccomp profile is applied to restrict the available system calls, further hardening the sandbox.
--   **Execution Timeouts:** A timeout is enforced on each execution to prevent long-running or infinite-loop processes.
+## 📜 License
 
-## Supported Languages
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-| Language   | Identifier   |
-| :--------- | :----------- |
-| C++        | `cpp`        |
-| Java       | `java`       |
-| Python     | `python`     |
-| JavaScript | `javascript` |
+## 🙏 Acknowledgments
 
-## Troubleshooting
+- AWS for providing robust cloud services
+- The Monaco Editor team for the excellent code editor
+- The Terraform community for infrastructure as code tools
+- React and Node.js communities for amazing frameworks
 
--   **Docker Not Running:** Ensure the Docker daemon is active. The application cannot execute code without it.
--   **Redis Connection Issues:** Verify that Redis is running and accessible at the `REDIS_URL` specified in your `server/.env` file.
--   **`EPERM` or `seccomp` Errors:** The seccomp profile for Docker is Linux-specific. On Windows or macOS, the application gracefully ignores it, relying on Docker's default security. These errors are non-critical on non-Linux systems.
--   **Syntax Validation Failures:** For local syntax validation to work, you must have the necessary compilers/interpreters (`g++`, `javac`, `python3`, `node`) installed and available in your system's `PATH`.
+---
 
-## Contributing
-
-Contributions are welcome! Please feel free to open an issue to report a bug or suggest a feature, or submit a pull request with your improvements.
-
-1.  Fork the repository.
-2.  Create a new feature branch (`git checkout -b feature/your-feature`).
-3.  Commit your changes (`git commit -m 'Add some feature'`).
-4.  Push to the branch (`git push origin feature/your-feature`).
-5.  Open a Pull Request.
+**Built with ❤️ for the cloud-native era**

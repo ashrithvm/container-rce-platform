@@ -1,0 +1,27 @@
+# terraform.tfvars.example
+# Copy this file to terraform.tfvars and customize the values
+
+# AWS Region
+aws_region = "us-east-1"
+
+# Environment
+environment = "dev"
+
+# Project name (used for resource naming)
+project_name = "container-rce-platform"
+
+# Custom domain name (optional, leave empty to use CloudFront default)
+domain_name = ""
+
+# Lambda configuration
+lambda_timeout = 300
+lambda_memory_size = 1024
+
+# SQS configuration
+sqs_visibility_timeout = 360
+
+# ElastiCache configuration
+elasticache_node_type = "cache.t3.micro"
+
+# Enable monitoring (CloudWatch alarms and dashboard)
+enable_monitoring = true

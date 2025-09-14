@@ -1,6 +1,6 @@
 {
   "name": "rce-app",
-  "version": "0.1.0",
+      "dev": "concurrently \"npm start\" \"npm run server\",version": "0.1.0",
   "private": true,
   "dependencies": {
     "@monaco-editor/react": "^4.6.0",
@@ -22,9 +22,17 @@
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
-    "server": "cd server && npm run dev",
-    "dev": "concurrently -n \"client,server\" -c \"bgBlue,bgYellow\" \"npm start\" \"npm run server\""
-  },
+    "server": "cd server && npm start",
+    "dev": "concurrently \"npm start\" \"npm run server\"",
+    "deploy": "./scripts/deploy.sh",
+    "deploy:destroy": "./scripts/deploy.sh destroy",
+    "deploy:plan": "./scripts/deploy.sh plan",
+    "update:lambda:api": "./scripts/update-lambda.sh api",
+    "update:lambda:executor": "./scripts/update-lambda.sh executor",
+    "tf:init": "cd terraform && terraform init",
+    "tf:plan": "cd terraform && terraform plan",
+    "tf:apply": "cd terraform && terraform apply",
+    "tf:destroy": "cd terraform && terraform destroy",
   "eslintConfig": {
     "extends": [
       "react-app",

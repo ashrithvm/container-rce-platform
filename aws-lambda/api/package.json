@@ -1,0 +1,15 @@
+{
+  "name": "rce-api-lambda",
+  "version": "1.0.0",
+  "description": "API Lambda function for RCE Platform",
+  "main": "index.js",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.445.0",
+    "@aws-sdk/client-sqs": "^3.445.0",
+    "redis": "^4.6.10",
+    "uuid": "^9.0.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

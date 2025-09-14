@@ -1,0 +1,13 @@
+{
+  "name": "rce-executor-lambda",
+  "version": "1.0.0",
+  "description": "Code executor Lambda function for RCE Platform",
+  "main": "index.js",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.445.0",
+    "redis": "^4.6.10"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

@@ -13,7 +13,7 @@ const Home = () => {
   const [leftWidth, setLeftWidth] = useState(window.innerWidth / 2); // Initial left pane width
   const [isDragging, setIsDragging] = useState(false); // Track dragging state
 
-  const baseUrl = process.env.REACT_APP_BASE_URL;
+  const baseUrl = process.env.REACT_APP_API_BASE_URL || 'https://your-api-gateway-url.execute-api.region.amazonaws.com/dev';
 
   const [codeSnippet, setCodeSnippet] = useState(defaultCodes[language]);
   const [showEditor, setShowEditor] = useState(true); // Control when to show the editor
